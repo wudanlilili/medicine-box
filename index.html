@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#2d8659" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="我的药箱" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <title>我的药箱</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部栏 -->
+    <header class="app-header">
+      <div class="header-title" id="headerTitle">我的药箱</div>
+    </header>
+
+    <!-- 首页 -->
+    <section class="page page-active" id="page-home">
+      <div class="stat-grid">
+        <div class="stat-card stat-medicine">
+          <div class="stat-num" id="statMedicineCount">0</div>
+          <div class="stat-label">医药库</div>
+        </div>
+        <div class="stat-card stat-inventory">
+          <div class="stat-num" id="statInventoryCount">0</div>
+          <div class="stat-label">在库药品</div>
+        </div>
+        <div class="stat-card stat-soon">
+          <div class="stat-num" id="statSoonCount">0</div>
+          <div class="stat-label">30天内到期</div>
+        </div>
+        <div class="stat-card stat-expired">
+          <div class="stat-num" id="statExpiredCount">0</div>
+          <div class="stat-label">已过期</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">今日用药</span>
+          <button class="card-link" onclick="navTo('medication')">全部 ›</button>
+        </div>
+        <div id="homeTodayMeds" class="dose-list">
+          <div class="empty-tip">今天没有用药计划</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">效期提醒</span>
+          <button class="card-link hidden" id="clearAllExpiredBtn" onclick="clearAllExpired()">一键清理过期</button>
+        </div>
+        <div id="expiryAlerts" class="alert-list">
+          <div class="empty-tip">暂无临期或过期药品</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">数据备份与迁移</span>
+        </div>
+        <div class="backup-actions">
+          <button class="backup-btn backup-export" onclick="openExportModal()">
+            <span class="backup-icon">📤</span>
+            <span class="backup-text">
+              <span class="backup-title">导出备份</span>
+              <span class="backup-sub">换手机前导出数据</span>
+            </span>
+          </button>
+          <button class="backup-btn backup-import" onclick="openImportModal()">
+            <span class="backup-icon">📥</span>
+            <span class="backup-text">
+              <span class="backup-title">导入数据</span>
+              <span class="backup-sub">从备份文件恢复</span>
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">快速操作</span>
+        </div>
+        <div class="quick-actions">
+          <button class="quick-btn" onclick="navTo('medicine'); setTimeout(openMedicineModal, 100)">
+            <span class="quick-icon">＋</span>
+            <span>新增药品</span>
+          </button>
+          <button class="quick-btn" onclick="navTo('inventory'); setInvView('purchase'); setTimeout(openPurchaseModal, 200)">
+            <span class="quick-icon">＋</span>
+            <span>采购登记</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 医药库 -->
+    <section class="page" id="page-medicine">
+      <div class="search-bar">
+        <input type="search" id="medicineSearch" placeholder="搜索名称 / 规格 / 厂家" />
+      </div>
+      <div id="medicineList" class="item-list"></div>
+      <div id="medicineEmpty" class="empty-state hidden">
+        <div class="empty-icon">💊</div>
+        <p>医药库还是空的</p>
+        <p class="empty-sub">点击右下角按钮添加第一个药品</p>
+      </div>
+      <button class="fab" onclick="openMedicineModal()">＋</button>
+    </section>
+
+    <!-- 库存 -->
+    <section class="page" id="page-inventory">
+      <div class="med-tabs inv-view-tabs" id="invViewTabs">
+        <button class="med-tab active" data-view="pack" onclick="setInvView('pack')">按包装单位</button>
+        <button class="med-tab" data-view="dose" onclick="setInvView('dose')">按使用单位</button>
+        <button class="med-tab" data-view="purchase" onclick="setInvView('purchase')">采购记录</button>
+        <button class="med-tab" data-view="finished" onclick="setInvView('finished')">历史药库</button>
+      </div>
+
+      <!-- 统计切换按钮（仅按使用单位时显示） -->
+      <div id="invStatToggles" class="stat-toggles hidden">
+        <button class="stat-toggle" id="toggleHideSpec" onclick="toggleHideSpec()">不显示规格</button>
+        <button class="stat-toggle" id="toggleHideExpiry" onclick="toggleHideExpiry()">不显示效期</button>
+      </div>
+
+      <div class="search-bar" id="invSearchBar">
+        <input type="search" id="inventorySearch" placeholder="搜索库存药品" />
+        <select id="inventoryFilter" class="filter-select">
+          <option value="all">全部</option>
+          <option value="expired">已过期</option>
+          <option value="soon">30天内到期</option>
+          <option value="valid">有效期内</option>
+        </select>
+      </div>
+      <div id="inventoryList" class="item-list"></div>
+      <div id="inventoryEmpty" class="empty-state hidden">
+        <div class="empty-icon">📦</div>
+        <p>还没有库存记录</p>
+        <p class="empty-sub">点击右下角按钮登记入库</p>
+      </div>
+      <button class="fab" id="invFab" onclick="openInventoryModal()">＋</button>
+      <button class="fab fab-alt hidden" id="purchaseFab" onclick="openPurchaseModal()">＋</button>
+    </section>
+
+    <!-- 用药管理 -->
+    <section class="page" id="page-medication">
+      <div class="med-tabs">
+        <button class="med-tab active" data-tab="today" onclick="setMedTab('today')">今日</button>
+        <button class="med-tab" data-tab="active" onclick="setMedTab('active')">处方</button>
+        <button class="med-tab" data-tab="selfuse" onclick="setMedTab('selfuse')">自用</button>
+        <button class="med-tab" data-tab="history" onclick="setMedTab('history')">历史</button>
+      </div>
+
+      <div id="medTabToday">
+        <button class="notify-toggle" id="notifyToggle" onclick="toggleNotify()">🔕 到点提醒：已关闭</button>
+        <div id="medTodayMeds" class="dose-list"></div>
+      </div>
+
+      <div id="medTabActive" class="hidden">
+        <div id="medActiveList" class="item-list"></div>
+      </div>
+
+      <div id="medTabSelfUse" class="hidden">
+        <div id="selfUseList" class="item-list"></div>
+      </div>
+
+      <div id="medTabHistory" class="hidden">
+        <div id="medHistoryList" class="item-list"></div>
+      </div>
+
+      <button class="fab" id="rxFab" onclick="openPrescriptionModal()">＋</button>
+      <button class="fab fab-alt hidden" id="suFab" onclick="openSelfUseModal()">＋</button>
+    </section>
+
+    <!-- 底部导航 -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" data-page="home">
+        <span class="nav-icon">🏠</span>
+        <span>首页</span>
+      </button>
+      <button class="nav-item" data-page="medication">
+        <span class="nav-icon">💊</span>
+        <span>用药</span>
+      </button>
+      <button class="nav-item" data-page="medicine">
+        <span class="nav-icon">📖</span>
+        <span>医药库</span>
+      </button>
+      <button class="nav-item" data-page="inventory">
+        <span class="nav-icon">📦</span>
+        <span>库存</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- 药品详情弹窗 -->
+  <div class="modal" id="medicineModal">
+    <div class="modal-overlay" onclick="closeMedicineModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="medicineModalTitle">新增药品</span>
+        <button class="modal-close" onclick="closeMedicineModal()">✕</button>
+      </div>
+      <form id="medicineForm" class="modal-body">
+        <input type="hidden" id="medicineId" />
+        <div class="form-group">
+          <label>药品名称 <span class="required">*</span></label>
+          <input type="text" id="mName" required placeholder="如：布洛芬缓释胶囊" />
+        </div>
+        <div class="form-group">
+          <label>通用名</label>
+          <input type="text" id="mGenericName" placeholder="如：布洛芬" />
+        </div>
+        <div class="form-group">
+          <label>生产厂家</label>
+          <input type="text" id="mManufacturer" placeholder="如：中美史克" />
+        </div>
+        <div class="form-group">
+          <label>药品规格</label>
+          <input type="text" id="mSpec" placeholder="如：0.3g×20粒/盒" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>包装单位</label>
+            <input type="text" id="mPackUnit" placeholder="盒/瓶/支" />
+          </div>
+          <div class="form-group">
+            <label>中标价（元）</label>
+            <input type="number" id="mBidPrice" min="0" step="0.01" placeholder="每包装价格" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>每包装含量</label>
+            <input type="number" id="mDosePerPack" min="0" step="any" placeholder="如：20" />
+          </div>
+          <div class="form-group">
+            <label>使用单位</label>
+            <input type="text" id="mDoseUnit" placeholder="颗/丸/ml/支/张" />
+          </div>
+        </div>
+        <div class="form-hint" style="margin:-8px 0 14px">每包装含量 = 1个包装内含多少使用单位（如 1盒=20粒），用于库存折算与打卡扣减</div>
+        <div class="form-group">
+          <label>用量模式</label>
+          <select id="mUsageMode">
+            <option value="auto">自动扣减（内服药/可计量外用药）</option>
+            <option value="manual">手动调整（药膏等不可计量外用药，打卡不扣库存）</option>
+          </select>
+          <div class="form-hint">外用药如敷贴/膏药等有计量单位可选自动扣减；药膏等无法精确计量的选手动调整</div>
+        </div>
+        <div class="form-group">
+          <label>药品图片</label>
+          <div class="image-upload-row">
+            <label class="image-upload-btn" for="mImageFile">📷 选择图片</label>
+            <input type="file" id="mImageFile" accept="image/*" hidden onchange="handleMedImage(this)" />
+            <div id="medImagePreview" class="med-image-preview hidden"></div>
+            <button type="button" id="medImageClear" class="btn-del-mini hidden" onclick="clearMedImage()">移除</button>
+          </div>
+          <div class="form-hint">可选，会自动压缩后保存</div>
+        </div>
+        <div class="form-group">
+          <label>功能 / 适应症</label>
+          <textarea id="mFunction" rows="3" placeholder="用于缓解轻至中度疼痛..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>禁忌</label>
+          <textarea id="mContraindications" rows="3" placeholder="对本品过敏者禁用..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="mNotes" rows="2" placeholder="可选"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeMedicineModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 库存详情弹窗 -->
+  <div class="modal" id="inventoryModal">
+    <div class="modal-overlay" onclick="closeInventoryModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="inventoryModalTitle">入库登记</span>
+        <button class="modal-close" onclick="closeInventoryModal()">✕</button>
+      </div>
+      <form id="inventoryForm" class="modal-body">
+        <input type="hidden" id="inventoryId" />
+        <div class="form-group">
+          <label>选择药品 <span class="required">*</span></label>
+          <select id="invMedicine" required>
+            <option value="">-- 请选择 --</option>
+          </select>
+          <div class="form-hint">列表来自医药库，也可直接新建</div>
+        </div>
+        <div class="form-group">
+          <label>或手动输入药品名</label>
+          <input type="text" id="invName" placeholder="不选上面时手动填写" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>购买日期</label>
+            <input type="date" id="invPurchaseDate" />
+          </div>
+          <div class="form-group">
+            <label>有效期至 <span class="required">*</span></label>
+            <input type="date" id="invExpiryDate" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>数量（包装） <span class="required">*</span></label>
+            <input type="number" id="invQuantity" required min="0" step="any" value="1" />
+          </div>
+          <div class="form-group">
+            <label>包装单位</label>
+            <input type="text" id="invUnit" placeholder="盒/瓶/支" value="盒" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>每包装含量</label>
+            <input type="number" id="invDosePerPack" min="0" step="any" placeholder="如：20" />
+          </div>
+          <div class="form-group">
+            <label>使用单位</label>
+            <input type="text" id="invDoseUnit" placeholder="颗/粒/ml/支/张" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>实付价格（元）</label>
+            <input type="number" id="invPaidPrice" min="0" step="0.01" placeholder="医保/优惠后" />
+          </div>
+          <div class="form-group">
+            <label>存放位置</label>
+            <input type="text" id="invLocation" placeholder="如：客厅药箱" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="invNotes" rows="2"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeInventoryModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 药品查看详情 -->
+  <div class="modal" id="medicineDetailModal">
+    <div class="modal-overlay" onclick="closeMedicineDetail()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>药品详情</span>
+        <button class="modal-close" onclick="closeMedicineDetail()">✕</button>
+      </div>
+      <div class="modal-body" id="medicineDetailBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeMedicineDetail()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 库存查看详情（含使用明细） -->
+  <div class="modal" id="inventoryDetailModal">
+    <div class="modal-overlay" onclick="closeInventoryDetail()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>库存详情</span>
+        <button class="modal-close" onclick="closeInventoryDetail()">✕</button>
+      </div>
+      <div class="modal-body" id="inventoryDetailBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeInventoryDetail()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 处方表单弹窗 -->
+  <div class="modal" id="prescriptionModal">
+    <div class="modal-overlay" onclick="closePrescriptionModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="prescriptionModalTitle">新建处方</span>
+        <button class="modal-close" onclick="closePrescriptionModal()">✕</button>
+      </div>
+      <form id="prescriptionForm" class="modal-body">
+        <input type="hidden" id="prescriptionId" />
+        <div class="form-group">
+          <label>处方名称</label>
+          <input type="text" id="rxName" placeholder="可选，默认用药品名，如：感冒用药" />
+        </div>
+        <div class="form-group">
+          <label>关联药品（来自医药库）</label>
+          <select id="rxMedicine">
+            <option value="">-- 手动输入药名 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>药品名称 <span class="required">*</span></label>
+          <input type="text" id="rxMedName" required placeholder="如：阿莫西林胶囊" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>每次用量</label>
+            <input type="text" id="rxDosage" placeholder="如：1片 / 5ml" />
+          </div>
+          <div class="form-group">
+            <label>服用要求</label>
+            <select id="rxInstruction">
+              <option value="">不限</option>
+              <option value="before">饭前</option>
+              <option value="after">饭后</option>
+              <option value="empty">空腹</option>
+              <option value="sleep">睡前</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>开始日期 <span class="required">*</span></label>
+            <input type="date" id="rxStartDate" required onchange="updateEndDateHint()" />
+          </div>
+          <div class="form-group">
+            <label>用药天数 <span class="required">*</span></label>
+            <input type="number" id="rxDays" required min="1" max="365" value="7" oninput="updateEndDateHint()" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>结束日期</label>
+          <div class="date-hint">自动计算：<strong id="rxEndDateHint">—</strong>（结束后自动归入历史处方）</div>
+        </div>
+        <div class="form-group">
+          <label>每日次数 <span class="required">*</span></label>
+          <select id="rxTimesPerDay" onchange="updateTimeInputs()">
+            <option value="1">每天 1 次</option>
+            <option value="2">每天 2 次</option>
+            <option value="3" selected>每天 3 次</option>
+            <option value="4">每天 4 次</option>
+            <option value="5">每天 5 次</option>
+            <option value="6">每天 6 次</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>使用时间点</label>
+          <div id="timeInputs" class="time-inputs"></div>
+          <div class="form-hint">可点击修改每个时间点</div>
+        </div>
+        <div class="form-group">
+          <label>用药原因</label>
+          <input type="text" id="rxReason" placeholder="如：感冒、高血压" />
+        </div>
+        <div class="form-group">
+          <label>医生 / 医院</label>
+          <input type="text" id="rxDoctor" placeholder="可选" />
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="rxNotes" rows="2" placeholder="可选"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closePrescriptionModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 处方详情弹窗 -->
+  <div class="modal" id="prescriptionDetailModal">
+    <div class="modal-overlay" onclick="closePrescriptionDetail()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>处方详情</span>
+        <button class="modal-close" onclick="closePrescriptionDetail()">✕</button>
+      </div>
+      <div class="modal-body" id="prescriptionDetailBody"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closePrescriptionDetail()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 采购记录弹窗 -->
+  <div class="modal" id="purchaseModal">
+    <div class="modal-overlay" onclick="closePurchaseModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="purchaseModalTitle">新增采购记录</span>
+        <button class="modal-close" onclick="closePurchaseModal()">✕</button>
+      </div>
+      <form id="purchaseForm" class="modal-body">
+        <input type="hidden" id="purchaseId" />
+        <div class="form-group">
+          <label>选择药品 <span class="required">*</span></label>
+          <select id="purMedicine" required>
+            <option value="">-- 请选择 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>或手动输入药品名</label>
+          <input type="text" id="purName" placeholder="不选上面时手动填写" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>来源</label>
+            <select id="purSource">
+              <option value="purchase">采购</option>
+              <option value="gift">赠予</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>采购日期</label>
+            <input type="date" id="purPurchaseDate" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>有效期至 <span class="required">*</span></label>
+          <input type="date" id="purExpiryDate" required />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>数量 <span class="required">*</span></label>
+            <input type="number" id="purQuantity" required min="0" step="any" value="1" />
+          </div>
+          <div class="form-group">
+            <label>包装单位</label>
+            <input type="text" id="purUnit" placeholder="盒/瓶/支" value="盒" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>每包装含量</label>
+            <input type="number" id="purDosePerPack" min="0" step="any" placeholder="如：20" />
+          </div>
+          <div class="form-group">
+            <label>使用单位</label>
+            <input type="text" id="purDoseUnit" placeholder="颗/粒/ml/支" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>实付价格（元）</label>
+            <input type="number" id="purPaidPrice" min="0" step="0.01" placeholder="医保/优惠后" />
+          </div>
+          <div class="form-group">
+            <label>存放位置</label>
+            <input type="text" id="purLocation" placeholder="如：客厅药箱" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="purNotes" rows="2" placeholder="可选"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closePurchaseModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存并入库</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 自行使用弹窗 -->
+  <div class="modal" id="selfUseModal">
+    <div class="modal-overlay" onclick="closeSelfUseModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="selfUseModalTitle">新增自行使用</span>
+        <button class="modal-close" onclick="closeSelfUseModal()">✕</button>
+      </div>
+      <form id="selfUseForm" class="modal-body">
+        <input type="hidden" id="selfUseId" />
+        <div class="form-group">
+          <label>使用模式 <span class="required">*</span></label>
+          <select id="suMode">
+            <option value="period">时间段使用（如连续7天）</option>
+            <option value="once">单次使用</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>关联药品（来自医药库）</label>
+          <select id="suMedicine">
+            <option value="">-- 手动输入药名 --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>药品名称 <span class="required">*</span></label>
+          <input type="text" id="suMedName" required placeholder="如：维生素C" />
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>每次用量</label>
+            <input type="text" id="suDosage" placeholder="如：1片 / 5ml" />
+          </div>
+          <div class="form-group">
+            <label>使用要求</label>
+            <select id="suInstruction">
+              <option value="">不限</option>
+              <option value="before">饭前</option>
+              <option value="after">饭后</option>
+              <option value="empty">空腹</option>
+              <option value="sleep">睡前</option>
+            </select>
+          </div>
+        </div>
+        <div id="suPeriodFields">
+          <div class="form-row">
+            <div class="form-group">
+              <label>开始日期 <span class="required">*</span></label>
+              <input type="date" id="suStartDate" required />
+            </div>
+            <div class="form-group">
+              <label>使用天数 <span class="required">*</span></label>
+              <input type="number" id="suDays" required min="1" max="365" value="7" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>结束日期</label>
+            <div class="date-hint">自动计算：<strong id="suEndDateHint">—</strong></div>
+          </div>
+          <div class="form-group">
+            <label>每日次数 <span class="required">*</span></label>
+            <select id="suTimesPerDay">
+              <option value="1">每天 1 次</option>
+              <option value="2">每天 2 次</option>
+              <option value="3" selected>每天 3 次</option>
+              <option value="4">每天 4 次</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>使用时间点</label>
+            <div id="suTimeInputs" class="time-inputs"></div>
+            <div class="form-hint">可点击修改每个时间点</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>使用原因</label>
+          <input type="text" id="suReason" placeholder="如：保健、自行用药" />
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="suNotes" rows="2" placeholder="可选"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeSelfUseModal()">取消</button>
+          <button type="submit" class="btn btn-primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 库存调整弹窗 -->
+  <div class="modal" id="adjustModal">
+    <div class="modal-overlay" onclick="closeAdjustModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>调整库存数量</span>
+        <button class="modal-close" onclick="closeAdjustModal()">✕</button>
+      </div>
+      <form id="adjustForm" class="modal-body">
+        <input type="hidden" id="adjustInvId" />
+        <div class="detail-row">
+          <div class="detail-label">药品名称</div>
+          <div class="detail-value" id="adjustMedName">—</div>
+        </div>
+        <div class="detail-row">
+          <div class="detail-label">当前数量</div>
+          <div class="detail-value" id="adjustOldQty">—</div>
+        </div>
+        <div class="form-group">
+          <label>调整后数量 <span class="required">*</span></label>
+          <input type="number" id="adjustNewQty" required min="0" step="any" />
+        </div>
+        <div class="form-group">
+          <label>损耗原因 <span class="required">*</span></label>
+          <select id="adjustReason" required>
+            <option value="lost">丢失/找不到</option>
+            <option value="gift">送人</option>
+            <option value="damaged">损坏</option>
+            <option value="expired">已过期丢弃</option>
+            <option value="used_up">已用完</option>
+            <option value="other">其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>备注</label>
+          <textarea id="adjustNote" rows="2" placeholder="可选，补充说明"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeAdjustModal()">取消</button>
+          <button type="submit" class="btn btn-primary">确认调整</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 导出弹窗 -->
+  <div class="modal" id="exportModal">
+    <div class="modal-overlay" onclick="closeExportModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>导出备份</span>
+        <button class="modal-close" onclick="closeExportModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="export-summary">
+          <div class="summary-row">
+            <span>医药库药品</span>
+            <strong id="exportMedCount">0</strong>
+          </div>
+          <div class="summary-row">
+            <span>库存记录</span>
+            <strong id="exportInvCount">0</strong>
+          </div>
+          <div class="summary-row">
+            <span>用药处方</span>
+            <strong id="exportRxCount">0</strong>
+          </div>
+          <div class="summary-row">
+            <span>采购记录</span>
+            <strong id="exportPurCount">0</strong>
+          </div>
+          <div class="summary-row">
+            <span>自行使用</span>
+            <strong id="exportSuCount">0</strong>
+          </div>
+          <div class="summary-row">
+            <span>导出时间</span>
+            <strong id="exportTime">—</strong>
+          </div>
+        </div>
+        <p class="export-tip">选择导出方式，数据包含全部医药库、库存、处方、采购与自行使用信息。</p>
+        <div class="export-options">
+          <button class="export-option" onclick="exportAsFile()">
+            <span class="export-icon">📄</span>
+            <span class="export-label">下载为文件</span>
+            <span class="export-desc">生成 .json 文件保存到手机</span>
+          </button>
+          <button class="export-option" onclick="exportAsClipboard()">
+            <span class="export-icon">📋</span>
+            <span class="export-label">复制到剪贴板</span>
+            <span class="export-desc">复制文本，可粘贴到微信/QQ发送</span>
+          </button>
+          <button class="export-option" id="shareBtn" onclick="exportAsShare()">
+            <span class="export-icon">🔗</span>
+            <span class="export-label">系统分享</span>
+            <span class="export-desc">直接分享到微信、QQ等应用</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeExportModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入弹窗 -->
+  <div class="modal" id="importModal">
+    <div class="modal-overlay" onclick="closeImportModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span>导入数据</span>
+        <button class="modal-close" onclick="closeImportModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="export-tip">选择导入方式。建议先导出当前数据作为备份再导入。</p>
+        <div class="export-options">
+          <label class="export-option" for="importFileInput">
+            <span class="export-icon">📁</span>
+            <span class="export-label">从文件导入</span>
+            <span class="export-desc">选择之前导出的 .json 文件</span>
+            <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="handleImportFile(event)" />
+          </label>
+          <button class="export-option" onclick="openClipboardImport()">
+            <span class="export-icon">📋</span>
+            <span class="export-label">从剪贴板导入</span>
+            <span class="export-desc">粘贴之前复制的备份文本</span>
+          </button>
+        </div>
+
+        <!-- 剪贴板粘贴区 -->
+        <div id="clipboardImportArea" class="clipboard-area hidden">
+          <label>粘贴备份文本</label>
+          <textarea id="clipboardText" rows="6" placeholder="在此粘贴导出的备份文本..."></textarea>
+          <div class="clipboard-actions">
+            <button class="btn btn-secondary" onclick="pasteFromClipboard()">📋 粘贴</button>
+            <button class="btn btn-primary" onclick="importFromClipboard()">解析并导入</button>
+          </div>
+        </div>
+
+        <!-- 导入策略选择 -->
+        <div id="importStrategyArea" class="strategy-area hidden">
+          <div class="strategy-title">选择导入方式</div>
+          <div class="strategy-info" id="strategyInfo"></div>
+          <div class="strategy-options">
+            <label class="strategy-option">
+              <input type="radio" name="strategy" value="merge" checked />
+              <span>
+                <strong>合并</strong>
+                <small>保留现有数据，新增备份中的数据（自动去重）</small>
+              </span>
+            </label>
+            <label class="strategy-option">
+              <input type="radio" name="strategy" value="replace" />
+              <span>
+                <strong>覆盖</strong>
+                <small>清空当前所有数据，仅保留备份中的数据</small>
+              </span>
+            </label>
+          </div>
+          <div class="modal-footer" style="padding: 12px 0 0 0;">
+            <button class="btn btn-secondary" onclick="cancelImportStrategy()">取消</button>
+            <button class="btn btn-primary" onclick="confirmImport()">确认导入</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeImportModal()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
